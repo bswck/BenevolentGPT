@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-pep_api_url = "https://peps.python.org/api/peps.json"
+PEP_API_URL = "https://peps.python.org/api/peps.json"
 output_dir = Path("downloaded_peps")
 output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -22,7 +22,6 @@ async def fetch_pep(
     pep_number: int,
     pep_url: str,
 ) -> None:
-    output_dir / f"pep-{pep_number:04d}.html"
     text_filename: Path = output_dir / f"pep-{pep_number:04d}.txt"
 
     with suppress(aiohttp.ClientError):
@@ -51,7 +50,7 @@ async def fetch_all_peps(peps: Mapping[str, object]) -> None:
 
 
 async def main() -> None:
-    async with aiohttp.ClientSession() as session, session.get(pep_api_url) as response:
+    async with aiohttp.ClientSession() as session, session.get(PEP_API_URL) as response:
         peps: Mapping[str, object] = await response.json()
 
     await fetch_all_peps(peps)
