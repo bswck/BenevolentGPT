@@ -1,0 +1,29 @@
+
+PEP 801 – Reserved
+
+Author:
+Barry Warsaw <barry at python.org>
+Status:
+Active
+Type:
+Informational
+Created:
+21-Jun-2018
+
+
+
+Table of Contents
+Abstract
+Copyright
+
+
+
+Abstract
+This PEP is reserved for future use, because
+We are the 801.
+Contact the author for details.
+
+
+Copyright
+This document has been placed in the public domain.
+

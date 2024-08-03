@@ -1,0 +1,23 @@
+
+PEP 210 – Decoupling the Interpreter Loop
+
+Author:
+David Ascher <davida at activestate.com>
+Status:
+Rejected
+Type:
+Standards Track
+Created:
+15-Jul-2000
+Python-Version:
+2.1
+Post-History:
+
+
+
+
+Warning
+This PEP has been rejected.
+×
+
+

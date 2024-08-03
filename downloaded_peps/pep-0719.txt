@@ -1,0 +1,87 @@
+
+PEP 719 – Python 3.13 Release Schedule
+
+Author:
+Thomas Wouters <thomas at python.org>
+Status:
+Active
+Type:
+Informational
+Topic:
+Release
+Created:
+26-May-2023
+Python-Version:
+3.13
+
+
+
+Table of Contents
+Abstract
+Release Manager and Crew
+Release Schedule
+3.13.0 schedule
+3.13 Lifespan
+
+
+Copyright
+
+
+
+Abstract
+This document describes the development and release schedule for
+Python 3.13.
+
+
+Release Manager and Crew
+
+3.13 Release Manager: Thomas Wouters
+Windows installers: Steve Dower
+Mac installers: Ned Deily
+Documentation: Julien Palard
+
+
+
+Release Schedule
+
+3.13.0 schedule
+Note: the dates below use a 17-month development period that results
+in a 12-month release cadence between feature versions, as defined by
+PEP 602.
+Actual:
+
+3.13 development begins: Monday, 2023-05-22
+3.13.0 alpha 1: Friday, 2023-10-13
+3.13.0 alpha 2: Wednesday, 2023-11-22
+3.13.0 alpha 3: Wednesday, 2024-01-17
+3.13.0 alpha 4: Thursday, 2024-02-15
+3.13.0 alpha 5: Tuesday, 2024-03-12
+3.13.0 alpha 6: Tuesday, 2024-04-09
+3.13.0 beta 1: Wednesday, 2024-05-08
+(No new features beyond this point.)
+3.13.0 beta 2: Wednesday, 2024-06-05
+3.13.0 beta 3: Thursday, 2024-06-27
+3.13.0 beta 4: Thursday, 2024-07-18
+3.13.0 candidate 1: Thursday, 2024-08-01
+
+Expected:
+
+3.13.0 candidate 2: Tuesday, 2024-09-03
+3.13.0 final: Tuesday, 2024-10-01
+
+Subsequent bugfix releases every two months.
+
+
+3.13 Lifespan
+3.13 will receive bugfix updates approximately every 2 months for
+approximately 24 months. Around the time of the release of 3.15.0 final, the
+final 3.13 bugfix update will be released. After that, it is expected that
+security updates (source only) will be released until 5 years after the
+release of 3.13.0 final, so until approximately October 2029.
+
+
+
+Copyright
+This document is placed in the public domain or under the CC0-1.0-Universal
+license, whichever is more permissive.
+

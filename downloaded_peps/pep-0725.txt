@@ -1,0 +1,674 @@
+
+PEP 725 – Specifying external dependencies in pyproject.toml
+
+Author:
+Pradyun Gedam <pradyunsg at gmail.com>,
+Ralf Gommers <ralf.gommers at gmail.com>
+Discussions-To:
+Discourse thread
+Status:
+Draft
+Type:
+Standards Track
+Topic:
+Packaging
+Created:
+17-Aug-2023
+Post-History:
+18-Aug-2023
+
+
+
+Table of Contents
+Abstract
+Motivation
+Rationale
+Types of external dependencies
+Cross compilation
+Terminology
+Build and host dependencies
+
+
+Specifying external dependencies
+Concrete package specification through PURL
+Virtual package specification
+Versioning
+Dependency specifiers
+
+
+Usage of core metadata fields
+Differences between sdist and wheel metadata
+Canonical names of dependencies and -dev(el) split packages
+Python development headers
+
+
+
+
+Specification
+Details
+Table name
+build-requires/optional-build-requires
+host-requires/optional-host-requires
+dependencies/optional-dependencies
+
+
+Examples
+
+
+Backwards Compatibility
+Security Implications
+How to Teach This
+Reference Implementation
+Rejected Ideas
+Specific syntax for external dependencies which are also packaged on PyPI
+Using library and header names as external dependencies
+
+
+Open Issues
+Version specifiers for PURLs
+Versioning of virtual dependencies
+Who defines canonical names and canonical package structure?
+Syntax for virtual dependencies
+Should a host-requires key be added under [build-system]?
+
+
+References
+Copyright
+
+
+
+Abstract
+This PEP specifies how to write a project’s external, or non-PyPI, build and
+runtime dependencies in a pyproject.toml file for packaging-related tools
+to consume.
+This PEP proposes to add an [external] table to pyproject.toml with
+three keys: “build-requires”, “host-requires” and “dependencies”. These
+are for specifying three types of dependencies:
+
+build-requires, build tools to run on the build machine
+host-requires, build dependencies needed for host machine but also needed at build time.
+dependencies, needed at runtime on the host machine but not needed at build time.
+
+Cross compilation is taken into account by distinguishing build and host dependencies.
+Optional build-time and runtime dependencies are supported too, in a manner analogies
+to how that is supported in the [project] table.
+
+
+Motivation
+Python packages may have dependencies on build tools, libraries, command-line
+tools, or other software that is not present on PyPI. Currently there is no way
+to express those dependencies in standardized metadata
+[1], [2]. Key motivators for
+this PEP are to:
+
+Enable tools to automatically map external dependencies to packages in other
+packaging repositories,
+Make it possible to include needed dependencies in error messages emitting by
+Python package installers and build frontends,
+Provide a canonical place for package authors to record this dependency
+information.
+
+Packaging ecosystems like Linux distros, Conda, Homebrew, Spack, and Nix need
+full sets of dependencies for Python packages, and have tools like pyp2spec
+(Fedora), Grayskull (Conda), and dh_python (Debian) which attempt to
+automatically generate dependency metadata for their own package managers from the metadata in
+upstream Python packages. External dependencies are currently handled manually,
+because there is no metadata for this in pyproject.toml or any other
+standard location. Enabling automating this conversion is a key benefit of
+this PEP, making packaging Python packages for distros easier and more reliable. In addition, the
+authors envision other types of tools making use of this information, e.g.,
+dependency analysis tools like Repology, Dependabot and libraries.io.
+Software bill of materials (SBOM) generation tools may also be able to use this
+information, e.g. for flagging that external dependencies listed in
+pyproject.toml but not contained in wheel metadata are likely vendored
+within the wheel.
+Packages with external dependencies are typically hard to build from source,
+and error messages from build failures tend to be hard to decipher for end
+users. Missing external dependencies on the end user’s system are the most
+likely cause of build failures. If installers can show the required external
+dependencies as part of their error message, this may save users a lot of time.
+At the moment, information on external dependencies is only captured in
+installation documentation of individual packages. It is hard to maintain for
+package authors and tends to go out of date. It’s also hard for users and
+distro packagers to find it. Having a canonical place to record this dependency
+information will improve this situation.
+This PEP is not trying to specify how the external dependencies should be used,
+nor a mechanism to implement a name mapping from names of individual packages
+that are canonical for Python projects published on PyPI to those of other
+packaging ecosystems. Those topics should be addressed in separate PEPs.
+
+
+Rationale
+
+Types of external dependencies
+Multiple types of external dependencies can be distinguished:
+
+Concrete packages that can be identified by name and have a canonical
+location in another language-specific package repository. E.g., Rust
+packages on crates.io, R packages on
+CRAN, JavaScript packages on the
+npm registry.
+Concrete packages that can be identified by name but do not have a clear
+canonical location. This is typically the case for libraries and tools
+written in C, C++, Fortran, CUDA and other low-level languages. E.g.,
+Boost, OpenSSL, Protobuf, Intel MKL, GCC.
+“Virtual” packages, which are names for concepts, types of tools or
+interfaces. These typically have multiple implementations, which are
+concrete packages. E.g., a C++ compiler, BLAS, LAPACK, OpenMP, MPI.
+
+Concrete packages are straightforward to understand, and are a concept present
+in virtually every package management system. Virtual packages are a concept
+also present in a number of packaging systems – but not always, and the
+details of their implementation varies.
+
+
+Cross compilation
+Cross compilation is not yet (as of August 2023) well-supported by stdlib
+modules and pyproject.toml metadata. It is however important when
+translating external dependencies to those of other packaging systems (with
+tools like pyp2spec). Introducing support for cross compilation immediately
+in this PEP is much easier than extending [external] in the future, hence
+the authors choose to include this now.
+
+Terminology
+This PEP uses the following terminology:
+
+build machine: the machine on which the package build process is being
+executed
+host machine: the machine on which the produced artifact will be installed
+and run
+build dependency: dependency for building the package that needs to be
+present at build time and itself was built for the build machine’s OS and
+architecture
+host dependency: dependency for building the package that needs to be
+present at build time and itself was built for the host machine’s OS and
+architecture
+
+Note that this terminology is not consistent across build and packaging tools,
+so care must be taken when comparing build/host dependencies in
+pyproject.toml to dependencies from other package managers.
+Note that “target machine” or “target dependency” is not used in this PEP. That
+is typically only relevant for cross-compiling compilers or other such advanced
+scenarios [3], [4] - this is out of scope for
+this PEP.
+Finally, note that while “dependency” is the term most widely used for packages
+needed at build time, the existing key in pyproject.toml for PyPI
+build-time dependencies is build-requires. Hence this PEP uses the keys
+build-requires and host-requires under [external] for consistency.
+
+
+Build and host dependencies
+Clear separation of metadata associated with the definition of build and target
+platforms, rather than assuming that build and target platform will always be
+the same, is important [5].
+Build dependencies are typically run during the build process - they may be
+compilers, code generators, or other such tools. In case the use of a build
+dependency implies a runtime dependency, that runtime dependency does not have
+to be declared explicitly. For example, when compiling Fortran code with
+gfortran into a Python extension module, the package likely incurs a
+dependency on the libgfortran runtime library. The rationale for not
+explicitly listing such runtime dependencies is two-fold: (1) it may depend on
+compiler/linker flags or details of the build environment whether the
+dependency is present, and (2) these runtime dependencies can be detected and
+handled automatically by tools like auditwheel.
+Host dependencies are typically not run during the build process, but only used
+for linking against. This is not a rule though – it may be possible or
+necessary to run a host dependency under an emulator, or through a custom tool
+like crossenv. When host dependencies imply a runtime dependency, that runtime
+dependency also does not have to be declared, just like for build dependencies.
+When host dependencies are declared and a tool is not cross-compilation aware
+and has to do something with external dependencies, the tool MAY merge the
+host-requires list into build-requires. This may for example happen if
+an installer like pip starts reporting external dependencies as a likely
+cause of a build failure when a package fails to build from an sdist.
+
+
+
+Specifying external dependencies
+
+Concrete package specification through PURL
+The two types of concrete packages are supported by PURL (Package URL), which
+implements a scheme for identifying packages that is meant to be portable
+across packaging ecosystems. Its design is:
+scheme:type/namespace/name@version?qualifiers#subpath
+
+
+The scheme component is a fixed string, pkg, and of the other
+components only type and name are required. As an example, a package
+URL for the requests package on PyPI would be:
+pkg:pypi/requests
+
+
+Adopting PURL to specify external dependencies in pyproject.toml solves a
+number of problems at once - and there are already implementations of the
+specification in Python and multiple languages. PURL is also already supported
+by dependency-related tooling like SPDX (see
+External Repository Identifiers in the SPDX 2.3 spec),
+the Open Source Vulnerability format,
+and the Sonatype OSS Index;
+not having to wait years before support in such tooling arrives is valuable.
+For concrete packages without a canonical package manager to refer to, either
+pkg:generic/pkg-name can be used, or a direct reference to the VCS system
+that the package is maintained in (e.g.,
+pkg:github/user-or-org-name/pkg-name). Which of these is more appropriate
+is situation-dependent. This PEP recommends using pkg:generic when the
+package name is unambiguous and well-known (e.g., pkg:generic/git or
+pkg:generic/openblas), and using the VCS as the PURL type otherwise.
+
+
+Virtual package specification
+There is no ready-made support for virtual packages in PURL or another
+standard. There are a relatively limited number of such dependencies though,
+and adopting a scheme similar to PURL but with the virtual: rather than
+pkg: scheme seems like it will be understandable and map well to Linux
+distros with virtual packages and to the likes of Conda and Spack.
+The two known virtual package types are compiler and interface.
+
+
+Versioning
+Support in PURL for version expressions and ranges beyond a fixed version is
+still pending, see the Open Issues section.
+
+
+Dependency specifiers
+Regular Python dependency specifiers (as originally defined in PEP 508) may
+be used behind PURLs. PURL qualifiers, which use ? followed by a package
+type-specific dependency specifier component, must not be used. The reason for
+this is pragmatic: dependency specifiers are already used for other metadata in
+pyproject.toml, any tooling that is used with pyproject.toml is likely
+to already have a robust implementation to parse it. And we do not expect to
+need the extra possibilities that PURL qualifiers provide (e.g. to specify a
+Conan or Conda channel, or a RubyGems platform).
+
+
+
+Usage of core metadata fields
+The core metadata specification contains one relevant field, namely
+Requires-External. This has no well-defined semantics in core metadata 2.1;
+this PEP chooses to reuse the field for external runtime dependencies. The core
+metadata specification does not contain fields for any metadata in
+pyproject.toml’s [build-system] table. Therefore the build-requires
+and host-requires content also does not need to be reflected in core
+metadata fields. The optional-dependencies content from [external]
+would need to either reuse Provides-Extra or require a new
+Provides-External-Extra field. Neither seems desirable.
+
+Differences between sdist and wheel metadata
+A wheel may vendor its external dependencies. This happens in particular when
+distributing wheels on PyPI or other Python package indexes - and tools like
+auditwheel, delvewheel and delocate automate this process. As a result, a
+Requires-External entry in an sdist may disappear from a wheel built from
+that sdist. It is also possible that a Requires-External entry remains in a
+wheel, either unchanged or with narrower constraints. auditwheel does not
+vendor certain allow-listed dependencies, such as OpenGL, by default. In
+addition, auditwheel and delvewheel allow a user to manually exclude
+dependencies via a --exclude or --no-dll command-line flag. This is
+used to avoid vendoring large shared libraries, for example those from CUDA.
+Requires-External entries generated from external dependencies in
+pyproject.toml in a wheel are therefore allowed to be narrower than those
+for the corresponding sdist. They must not be wider, i.e. constraints must not
+allow a version of a dependency for a wheel that isn’t allowed for an sdist,
+nor contain new dependencies that are not listed in the sdist’s metadata at
+all.
+
+
+Canonical names of dependencies and -dev(el) split packages
+It is fairly common for distros to split a package into two or more packages.
+In particular, runtime components are often separately installable from
+development components (headers, pkg-config and CMake files, etc.). The latter
+then typically has a name with -dev or -devel appended to the
+project/library name. This split is the responsibility of each distro to
+maintain, and should not be reflected in the [external] table. It is not
+possible to specify this in a reasonable way that works across distros, hence
+only the canonical name should be used in [external].
+The intended meaning of using a PURL or virtual dependency is “the full package
+with the name specified”. It will depend on the context in which the metadata
+is used whether the split is relevant. For example, if libffi is a host
+dependency and a tool wants to prepare an environment for building a wheel,
+then if a distro has split off the headers for libffi into a
+libffi-devel package then the tool has to install both libffi and
+libffi-devel.
+
+
+Python development headers
+Python headers and other build support files may also be split. This is the
+same situation as in the section above (because Python is simply a regular
+package in distros). However, a python-dev|devel dependency is special because
+in pyproject.toml Python itself is an implicit rather than an explicit
+dependency. Hence a choice needs to be made here - add python-dev implicitly,
+or make each package author add it explicitly under [external]. For
+consistency between Python dependencies and external dependencies, we choose to
+add it implicitly. Python development headers must be assumed to be necessary
+when an [external] table contains one or more compiler packages.
+
+
+
+
+Specification
+If metadata is improperly specified then tools MUST raise an error to notify
+the user about their mistake.
+
+Details
+Note that pyproject.toml content is in the same format as in PEP 621.
+
+Table name
+Tools MUST specify fields defined by this PEP in a table named [external].
+No tools may add fields to this table which are not defined by this PEP or
+subsequent PEPs. The lack of an [external] table means the package either
+does not have any external dependencies, or the ones it does have are assumed
+to be present on the system already.
+
+
+build-requires/optional-build-requires
+
+Format: Array of PURL strings (build-requires) and a table
+with values of arrays of PURL strings (optional-build-requires)
+Core metadata: N/A
+
+The (optional) external build requirements needed to build the project.
+For build-requires, it is a key whose value is an array of strings. Each
+string represents a build requirement of the project and MUST be formatted as
+either a valid PURL string or a virtual: string.
+For optional-build-requires, it is a table where each key specifies an
+extra set of build requirements and whose value is an array of strings. The
+strings of the arrays MUST be valid PURL strings.
+
+
+host-requires/optional-host-requires
+
+Format: Array of PURL strings (host-requires) and a table
+with values of arrays of PURL strings (optional-host-requires)
+Core metadata: N/A
+
+The (optional) external host requirements needed to build the project.
+For host-requires, it is a key whose value is an array of strings. Each
+string represents a host requirement of the project and MUST be formatted as
+either a valid PURL string or a virtual: string.
+For optional-host-requires, it is a table where each key specifies an
+extra set of host requirements and whose value is an array of strings. The
+strings of the arrays MUST be valid PURL strings.
+
+
+dependencies/optional-dependencies
+
+Format: Array of PURL strings (dependencies) and a table
+with values of arrays of PURL strings (optional-dependencies)
+Core metadata: Requires-External, N/A
+
+The (optional) runtime dependencies of the project.
+For dependencies, it is a key whose value is an array of strings. Each
+string represents a dependency of the project and MUST be formatted as either a
+valid PURL string or a virtual: string. Each string maps directly to a
+Requires-External entry in the core metadata.
+For optional-dependencies, it is a table where each key specifies an extra
+and whose value is an array of strings. The strings of the arrays MUST be valid
+PURL strings. Optional dependencies do not map to a core metadata field.
+
+
+
+Examples
+These examples show what the [external] content for a number of packages is
+expected to be.
+cryptography 39.0:
+[external]
+build-requires = [
+  "virtual:compiler/c",
+  "virtual:compiler/rust",
+  "pkg:generic/pkg-config",
+]
+host-requires = [
+  "pkg:generic/openssl",
+  "pkg:generic/libffi",
+]
+
+
+SciPy 1.10:
+[external]
+build-requires = [
+  "virtual:compiler/c",
+  "virtual:compiler/cpp",
+  "virtual:compiler/fortran",
+  "pkg:generic/ninja",
+  "pkg:generic/pkg-config",
+]
+host-requires = [
+  "virtual:interface/blas",
+  "virtual:interface/lapack",  # >=3.7.1 (can't express version ranges with PURL yet)
+]
+
+
+Pillow 10.1.0:
+[external]
+build-requires = [
+  "virtual:compiler/c",
+]
+host-requires = [
+  "pkg:generic/libjpeg",
+  "pkg:generic/zlib",
+]
+
+[external.optional-host-requires]
+extra = [
+  "pkg:generic/lcms2",
+  "pkg:generic/freetype",
+  "pkg:generic/libimagequant",
+  "pkg:generic/libraqm",
+  "pkg:generic/libtiff",
+  "pkg:generic/libxcb",
+  "pkg:generic/libwebp",
+  "pkg:generic/openjpeg",  # add >=2.0 once we have version specifiers
+  "pkg:generic/tk",
+]
+
+
+NAVis 1.4.0:
+[project.optional-dependencies]
+r = ["rpy2"]
+
+[external]
+build-requires = [
+  "pkg:generic/XCB; platform_system=='Linux'",
+]
+
+[external.optional-dependencies]
+nat = [
+  "pkg:cran/nat",
+  "pkg:cran/nat.nblast",
+]
+
+
+Spyder 6.0:
+[external]
+dependencies = [
+  "pkg:cargo/ripgrep",
+  "pkg:cargo/tree-sitter-cli",
+  "pkg:golang/github.com/junegunn/fzf",
+]
+
+
+jupyterlab-git 0.41.0:
+[external]
+dependencies = [
+  "pkg:generic/git",
+]
+
+[external.optional-build-requires]
+dev = [
+  "pkg:generic/nodejs",
+]
+
+
+PyEnchant 3.2.2:
+[external]
+dependencies = [
+  # libenchant is needed on all platforms but only vendored into wheels on
+  # Windows, so on Windows the build backend should remove this external
+  # dependency from wheel metadata.
+  "pkg:github/AbiWord/enchant",
+]
+
+
+
+
+
+Backwards Compatibility
+There is no impact on backwards compatibility, as this PEP only adds new,
+optional metadata. In the absence of such metadata, nothing changes for package
+authors or packaging tooling.
+
+
+Security Implications
+There are no direct security concerns as this PEP covers how to statically
+define metadata for external dependencies. Any security issues would stem from
+how tools consume the metadata and choose to act upon it.
+
+
+How to Teach This
+External dependencies and if and how those external dependencies are vendored
+are topics that are typically not understood in detail by Python package
+authors. We intend to start from how an external dependency is defined, the
+different ways it can be depended on—from runtime-only with ctypes or a
+subprocess call to it being a build dependency that’s linked against—
+before going into how to declare external dependencies in metadata. The
+documentation should make explicit what is relevant for package authors, and
+what for distro packagers.
+Material on this topic will be added to the most relevant packaging tutorials,
+primarily the Python Packaging User Guide. In addition, we expect that any
+build backend that adds support for external dependencies metadata will include
+information about that in its documentation, as will tools like auditwheel.
+
+
+Reference Implementation
+This PEP contains a metadata specification, rather that a code feature - hence
+there will not be code implementing the metadata spec as a whole. However,
+there are parts that do have a reference implementation:
+
+The [external] table has to be valid TOML and therefore can be loaded
+with tomllib.
+The PURL specification, as a key part of this spec, has a Python package
+with a reference implementation for constructing and parsing PURLs:
+packageurl-python.
+
+There are multiple possible consumers and use cases of this metadata, once
+that metadata gets added to Python packages. Tested metadata for all of the
+top 150 most-downloaded packages from PyPI with published platform-specific
+wheels can be found in rgommers/external-deps-build. This metadata has
+been validated by using it to build wheels from sdists patched with that
+metadata in clean Docker containers.
+
+
+Rejected Ideas
+
+Specific syntax for external dependencies which are also packaged on PyPI
+There are non-Python packages which are packaged on PyPI, such as Ninja,
+patchelf and CMake. What is typically desired is to use the system version of
+those, and if it’s not present on the system then install the PyPI package for
+it. The authors believe that specific support for this scenario is not
+necessary (or too complex to justify such support); a dependency provider for
+external dependencies can treat PyPI as one possible source for obtaining the
+package.
+
+
+Using library and header names as external dependencies
+A previous draft PEP (“External dependencies” (2015))
+proposed using specific library and header names as external dependencies. This
+is too granular; using package names is a well-established pattern across
+packaging ecosystems and should be preferred.
+
+
+
+Open Issues
+
+Version specifiers for PURLs
+Support in PURL for version expressions and ranges is still pending. The pull
+request at vers implementation for PURL seems close to being merged, at
+which point this PEP could adopt it.
+
+
+Versioning of virtual dependencies
+Once PURL supports version expressions, virtual dependencies can be versioned
+with the same syntax. It must be better specified however what the version
+scheme is, because this is not as clear for virtual dependencies as it is for
+PURLs (e.g., there can be multiple implementations, and abstract interfaces may
+not be unambiguously versioned). E.g.:
+
+OpenMP: has regular MAJOR.MINOR versions of its standard, so would look
+like >=4.5.
+BLAS/LAPACK: should use the versioning used by Reference LAPACK, which
+defines what the standard APIs are. Uses MAJOR.MINOR.MICRO, so would look
+like >=3.10.0.
+Compilers: these implement language standards. For C, C++ and Fortran these
+are versioned by year. In order for versions to sort correctly, we choose to
+use the full year (four digits). So “at least C99” would be >=1999, and
+selecting C++14 or Fortran 77 would be ==2014 or ==1977 respectively.
+Other languages may use different versioning schemes. These should be
+described somewhere before they are used in pyproject.toml.
+
+A logistical challenge is where to describe the versioning - given that this
+will evolve over time, this PEP itself is not the right location for it.
+Instead, this PEP should point at that (to be created) location.
+
+
+Who defines canonical names and canonical package structure?
+Similarly to the logistics around versioning is the question about what names
+are allowed and where they are described. And then who is in control of that
+description and responsible for maintaining it. Our tentative answer is: there
+should be a central list for virtual dependencies and pkg:generic PURLs,
+maintained as a PyPA project. See
+https://discuss.python.org/t/pep-725-specifying-external-dependencies-in-pyproject-toml/31888/62.
+TODO: once that list/project is prototyped, include it in the PEP and close
+this open issue.
+
+
+Syntax for virtual dependencies
+The current syntax this PEP uses for virtual dependencies is
+virtual:type/name, which is analogous to but not part of the PURL spec.
+This open issue discusses supporting virtual dependencies within PURL:
+purl-spec#222.
+
+
+Should a host-requires key be added under [build-system]?
+Adding host-requires for host dependencies that are on PyPI in order to
+better support name mapping to other packaging systems with support for
+cross-compiling may make sense.
+This issue tracks this topic
+and has arguments in favor and against adding host-requires under
+[build-system] as part of this PEP.
+
+
+
+References
+
+
+[1]
+The “define native requirements metadata”
+part of the “Wanting a singular packaging vision” thread (2022, Discourse):
+https://discuss.python.org/t/wanting-a-singular-packaging-tool-vision/21141/92
+
+[2]
+pypackaging-native: “Native dependencies”
+https://pypackaging-native.github.io/key-issues/native-dependencies/
+
+[3]
+GCC documentation - Configure Terms and History,
+https://gcc.gnu.org/onlinedocs/gccint/Configure-Terms.html
+
+[4]
+Meson documentation - Cross compilation
+https://mesonbuild.com/Cross-compilation.html
+
+[5]
+pypackaging-native: “Cross compilation”
+https://pypackaging-native.github.io/key-issues/cross_compilation/
+
+[6]
+The “pkgconfig specification as an
+alternative to ctypes.util.find_library” thread (2023, Discourse):
+https://discuss.python.org/t/pkgconfig-specification-as-an-alternative-to-ctypes-util-find-library/31379
+
+
+
+Copyright
+This document is placed in the public domain or under the
+CC0-1.0-Universal license, whichever is more permissive.
+
