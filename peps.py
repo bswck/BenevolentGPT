@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import aiofiles
 import aiohttp
-from aiofiles import open
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
@@ -24,7 +25,7 @@ async def fetch_pep(
     output_dir / f"pep-{pep_number:04d}.html"
     text_filename: Path = output_dir / f"pep-{pep_number:04d}.txt"
 
-    try:
+    with suppress(aiohttp.ClientError):
         async with session.get(pep_url) as response:
             response.raise_for_status()
             content = await response.text()
@@ -34,13 +35,12 @@ async def fetch_pep(
             pep_content = soup.find("section", id="pep-content")
             if pep_content:
                 # Save the extracted content as plain text
-                async with open(text_filename, "w", encoding="utf-8") as file:
+                async with (
+                    aiofiles.open(text_filename, "w", encoding="utf-8") as file,
+                ):
                     await file.write(pep_content.get_text())
-            else:
-                pass
-
-    except aiohttp.ClientError:
-        pass
+                    await aiofiles.stdout.write(f"Wrote {text_filename}\n")
+                    await aiofiles.stdout.flush()
 
 
 async def fetch_all_peps(peps: Mapping[str, object]) -> None:
@@ -50,16 +50,13 @@ async def fetch_all_peps(peps: Mapping[str, object]) -> None:
             pep_url: str | None = pep_info.get("url")
             if pep_url:
                 tasks.append(fetch_pep(session, int(pep_num), pep_url))
-            else:
-                pass
 
         await asyncio.gather(*tasks)
 
 
 async def main() -> None:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(pep_api_url) as response:
-            peps: Mapping[str, object] = await response.json()
+    async with aiohttp.ClientSession() as session, session.get(pep_api_url) as response:
+        peps: Mapping[str, object] = await response.json()
 
     await fetch_all_peps(peps)
 
