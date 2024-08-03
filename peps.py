@@ -31,13 +31,9 @@ async def fetch_pep(
             content = await response.text()
             soup = BeautifulSoup(content, "html.parser")
 
-            # Extract the content of the PEP
             pep_content = soup.find("section", id="pep-content")
             if pep_content:
-                # Save the extracted content as plain text
-                async with (
-                    aiofiles.open(text_filename, "w", encoding="utf-8") as file,
-                ):
+                async with aiofiles.open(text_filename, "w", encoding="utf-8") as file:
                     await file.write(pep_content.get_text())
                     await aiofiles.stdout.write(f"Wrote {text_filename}\n")
                     await aiofiles.stdout.flush()
